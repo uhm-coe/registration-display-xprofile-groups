@@ -8,7 +8,7 @@ and open the template in the editor.
     Author     : Kirk Johnson
 */
 .register-section.extended-profile, .register-section.default-profile{
-    flex-basis: 33%!important;
+    flex-basis: 36%!important;
     flex-grow: 3!important;
 }
 

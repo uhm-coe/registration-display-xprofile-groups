@@ -8,14 +8,15 @@ Author: Kirk Johnson
 Author URI:
 License: GPL3
 License URI: http://www.gnu.org/licenses/gpl.html
-*/
-
+ */
 
 if (!class_exists('Registration_Display_xProfile_Groups')) {
     class Registration_Display_xProfile_Groups
     {
+        private $selected;
         public function __construct()
         {
+            $this->selected = get_site_option("registration_selected_xprofile_groups");
         }
         /*
          * set all action hooks and filters used by plugin
@@ -28,13 +29,21 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
             add_action('admin_menu', array($this, 'options_menu'));
             //add admin scripts
             add_action('admin_enqueue_scripts', array($this, 'add_admin_scripts'));
-      
+
             //add front end css
             add_action('wp_enqueue_scripts', array($this, 'add_frontend_styles_and_scripts'));
             //settings page AJAX action
-            add_action('wp_ajax_store_xprofile_field_groups', array( $this, 'store_xprofile_field_groups' ));
+            add_action('wp_ajax_store_xprofile_field_groups', array($this, 'store_xprofile_field_groups'));
+            //add validation for forms
+            if ($_POST) {
+                add_action('bp_actions', array($this,"possible_form_validation"), 0);
+            }
+            //add signup meta from xprofile fields
+            add_filter('bp_signup_usermeta', array($this, 'xprofile_add_signup_meta' ), 1, 1);
+            //save xprofile field data to field on activation
+            add_action('bp_core_activated_user', array($this, 'xprofile_activate_user'), 10, 3);
         }
-    
+
         /*
          * admin scripts
          */
@@ -46,13 +55,87 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
                 wp_enqueue_script('registration-xprofile-settings-script');
                 //localize for ajax calls
                 wp_localize_script(
-                        'registration-xprofile-settings-script',
+                    'registration-xprofile-settings-script',
                     'xprofile_object',
                     array(
-                                'ajax_url' => admin_url('admin-ajax.php'),
-                                'nonce'    => wp_create_nonce('settings_nonce'),
-                        )
+                        'ajax_url' => admin_url('admin-ajax.php'),
+                        'nonce'    => wp_create_nonce('settings_nonce'),
+                    )
                 );
+            }
+        }
+        /*
+         * form validation
+         */
+        public function possible_form_validation()
+        {
+            global $bp;
+            //make sure we are in registration
+            if (!function_exists('bp_is_current_component') || !bp_is_current_component('register')) {
+                return;
+            }
+          
+            //get groups
+            $field_groups = bp_profile_get_field_groups();
+          
+            //iterate through groups
+            foreach ($field_group as  $group) {
+                //if not base and is used in registration check
+                if ($group->id != 1 && $this->use_group_in_registration($group->id)) {
+                    //iterate through fields
+                    foreach ($group->fields as $field) {
+                        //check if requried
+                        if ($field->is_required) {
+                            //make key
+                            $key = "field_".$field->id;
+                            //if not in post set error
+                            if (!isset($_POST[$key]) || empty($_POST[$key])) {
+                                $bp->signup->errors = (!is_null($bp->signup->errors))?$bp->signup->errors = array() :$bp->signup->errors;
+                                //add error
+                                $bp->signup->errors[sanitize_text_field($field->name)] = "You must fill out field '".$field->name."' ";
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        /*
+         * xprofile_add_signup_meta
+         * add meta from xprofile items not in base to pending user signup
+         */
+        public function xprofile_add_signup_meta($meta)
+        {
+            $field_groups = bp_profile_get_field_groups();
+            foreach ($field_groups as  $group) {
+                if ($group->id != 1 && $this->use_group_in_registration($group->id)) {
+                    foreach ($group->fields as $field) {
+                        $key = "field_".$field->id;
+                        if (! empty($_POST[$key])) {
+                            $meta[$key] = $_POST[$key];
+                        }
+                    }
+                }
+            }
+            return $meta;
+        }
+        public function xprofile_activate_user($user_id, $key, $user)
+        {
+            $meta = $user['meta'];
+            //get field groups
+            $field_groups = bp_profile_get_field_groups();
+            //iterate those not in base
+            foreach ($field_groups as  $group) {
+                if ($group->id != 1 && $this->use_group_in_registration($group->id)) {
+                    //iterate through fields
+                    foreach ($group->fields as $field) {
+                        //generate key
+                        $key = "field_".$field->id;
+                        //if value is in meta store value in field associated with user
+                        if (isset($meta[$key]) && ! empty($meta[$key])) {
+                            xprofile_set_field_data($field->id, $user_id, $meta[$key], $field->is_required);
+                        }
+                    }
+                }
             }
         }
         /*
@@ -65,18 +148,27 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
         }
         public function options_menu()
         {
-            add_options_page("Registration xProfile Settings", "Registration xProfile Settings", "manage_options", "registration-xprofile-settings", array($this,"registration_xprofile_settings"));
+            add_options_page("Registration xProfile Settings", "Registration xProfile Settings", "manage_options", "registration-xprofile-settings", array($this, "registration_xprofile_settings"));
         }
         public function store_xprofile_field_groups()
         {
             //verify nonce
-            if (! wp_verify_nonce($_REQUEST['nonce'], 'settings_nonce')) {
+            if (!wp_verify_nonce($_REQUEST['nonce'], 'settings_nonce')) {
                 exit('Invalid AJAX call');
             }
-            $selected = (isset($_REQUEST["selected"])) ? $_REQUEST["selected"] : array(); //if none are seleced this paramater won't be set
+            $selected = (isset($_REQUEST["selected"]))?$_REQUEST["selected"]:array();//if none are seleced this paramater won't be set
             //update selected boxes
             update_site_option("registration_selected_xprofile_groups", $_REQUEST["selected"]);
             wp_send_json_success();
+        }
+        /*
+         * True or false if group is used in registration
+         * @input $group_id
+         * @return bool
+         */
+        private function use_group_in_registration($group_id)
+        {
+            return (bool) in_array($group_id, $this->selected);
         }
         /*
          * render_xprofile_fields
@@ -85,23 +177,226 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
         public function render_xprofile_fields()
         {
             $field_groups = bp_profile_get_field_groups();
-            
+
             //get selected groups
             $selected = get_site_option("registration_selected_xprofile_groups");
-            
+
             //iterate through each group
             foreach ($field_groups as $group) {
+
                 //if group is not 'Base' then render it with it's required fields
-                if ($group->id != 1 && in_array($group->id, $selected)) {
+                if ($group->id != 1 && $this->use_group_in_registration($group->id)) {
                     ?>
-            <div class="register-section extended-profile" id="profile-details-section">
+                      <div class="register-section extended-profile" id="profile-details-section">
 
-               <h2 class="bp-heading"><?php esc_html_e($group->name, 'buddypress'); ?></h2>
+                         <h2 class="bp-heading"><?php esc_html_e($group->name, 'buddypress'); ?></h2>
+                                                          <?php
+                          foreach ($group->fields as $field) {
+                              $html = $this->get_field_html($field);
+                              echo $html; ?>
+                            
 
-            </div>
-            <?php
+                                                    <?php
+                          } ?>
+                      </div>
+                          <?php
                 }
             }
+        }
+        private function get_field_html($field)
+        {
+            $id = apply_filters('bp_get_the_profile_field_input_name', 'field_' . $field->id);
+            $name = apply_filters('bp_get_the_profile_field_input_name', 'field_' . $field->id);
+            
+            $aria_required = ($field->is_required) ? ' aria-required="true" required ' : ' aria-required="false" ';
+            $aria_required .= ' aria-labelledby="field_'.$id.'-1" ';
+            $html = '<div class ="editfield '.$id.
+                        'field_'.trim(strtolower($field->name)).' visibility-public field_type_'.$field->type.' '
+                    .(($field->is_required)? "required-field" : ''). '">'
+                    . '<fieldset>';
+            //label
+            $html .= '<legend id="'.$id.'-1">'
+                    . ' '.$field->name.' '
+                    . (($field->is_required)? '<span class="bp-required-field-label">(required)</span>' : '')
+                    . '</legend>';
+            if ($field->description) {
+                $html .='<p class="description" tabindex="0">'.$field->description.'</p>';
+            }
+            //possible error
+            ob_start();
+            do_action('bp_'. sanitize_text_field($field->name).'_errors');
+            $errors = ob_get_contents();
+            ob_get_clean();
+            $html .= $errors;
+            //get specific type html
+            switch ($field->type) {
+              case 'text':
+                $value = (isset($_POST[$id])) ? $_POST[$id] : '';
+                $html .= '<input id="'.$id.'" name="'.$name.'" type="text" '
+                      . $aria_required.' value="'.$value.'" /> ';
+                break;
+              case 'checkbox':
+                $html .= '<div id="'.$id.'" class="input-options checkbox-options">';
+                $options = $field->type_obj->field_obj->get_children();
+                $count = 0;
+                foreach ($options as $opt) {
+                    $checked = (isset($_POST[$id]) && is_array($_POST[$id]) && in_array($opt->name, $_POST[$id])) ?
+                            " checked " : '';
+                    $opt_id = 'field_'.$opt->id.'_'.$count;
+                    $html .= '<label for="'.$opt_id.'"  class="option-label">'
+                            . '<input type="checkbox" name="'.$id.'[]" id="'.$opt_id.'" value="'.$opt->name.'" '.$checked.'>'.$opt->name
+                          . '</label>';
+                    $count++;
+                }
+                $option_values = maybe_unserialize(BP_XProfile_ProfileData::get_value_byid($this->field_obj->id, $args['user_id']));
+                $html .= '</div>';
+                break;
+              case 'radio':
+                $html .= '<div id="'.$id.'" class="input-options checkbox-options">';
+                $options = $field->type_obj->field_obj->get_children();
+                foreach ($options as $opt) {
+                    $checked = (isset($_POST[$id]) && $_POST[$id] == $opt->name) ? " checked " : "";
+                    $opt_id = 'option_'.$opt->id;
+                    $html .= '<label for="'.$opt_id.'"  class="option-label">'
+                            . '<input type="radio" name="'.$id.'" id="'.$opt_id.'" value="'.$opt->name.'" '.$checked.'>'.$opt->name
+                          . '</label>';
+                }
+                $option_values = maybe_unserialize(BP_XProfile_ProfileData::get_value_byid($this->field_obj->id, $args['user_id']));
+                $html .= '</div>';
+                break;
+              case 'multiselectbox':
+                $html .= '<select id="'.$id.'[]" name="'.$id.'[]" multiple="multiple" '.$aria_required.' >';
+                $args = bp_parse_args(array(), array(
+                                'type'    => false,
+                                'user_id' => bp_displayed_user_id(),
+                        ), 'get_the_profile_field_options');
+                ob_start();
+                $field->type_obj->edit_field_options_html($args);
+                $select_options = ob_get_contents();
+                ob_end_clean();
+                $html .= $select_options;
+                $html .= '</select>';
+                break;
+              case 'selectbox':
+                $html .= '<select id="'.$id.'" name="'.$id.'"  '.$aria_required.' >';
+                $args = bp_parse_args(array(), array(
+                                'type'    => false,
+                                'user_id' => bp_displayed_user_id(),
+                        ), 'get_the_profile_field_options');
+                ob_start();
+                $field->type_obj->edit_field_options_html($args);
+                $select_options = ob_get_contents();
+                ob_end_clean();
+                $html .= $select_options;
+                $html .= '</select>';
+                break;
+              case 'datebox':
+                $user_id = bp_displayed_user_id();
+
+                $html .= '<div class="input-options datebox-selects">';
+                //days
+                $html .= '<label for="'.$id.'_day" class="xprofile-field-label">Day<label>';
+                $html .= '<select id="'.$id.'_day" name="'.$id.'_day" '.$aria_required.' >';
+                $args = bp_parse_args(
+                    array(
+                        'type'    => 'day',
+                        'user_id' => $user_id),
+                        array(
+                                'type'    => false,
+                                'user_id' => bp_displayed_user_id(),
+                        ),
+                    'get_the_profile_field_options'
+                );
+                ob_start();
+                $field->type_obj->edit_field_options_html($args);
+                $select_options = ob_get_contents();
+                ob_end_clean();
+                $html .= $select_options;
+                $html .= '</select>';
+                //months
+                $html .= '<label for="'.$id.'_month" class="xprofile-field-label">Month<label>';
+                $html .= '<select id="'.$id.'_month" name="'.$id.'_month" '.$aria_required.' >';
+                $args = bp_parse_args(
+                    array(
+                        'type'    => 'month',
+                        'user_id' => $user_id),
+                        array(
+                                'type'    => false,
+                                'user_id' => bp_displayed_user_id(),
+                        ),
+                    'get_the_profile_field_options'
+                );
+                ob_start();
+                $field->type_obj->edit_field_options_html($args);
+                $select_options = ob_get_contents();
+                ob_end_clean();
+                $html .= $select_options;
+                $html .= '</select>';
+                //years
+                $html .= '<label for="'.$id.'_year" class="xprofile-field-label">Year<label>';
+                $html .= '<select id="'.$id.'_year" name="'.$id.'_year" '.$aria_required.' >';
+                $args = bp_parse_args(
+                    array(
+                        'type'    => 'year',
+                        'user_id' => $user_id),
+                        array(
+                                'type'    => false,
+                                'user_id' => bp_displayed_user_id(),
+                        ),
+                    'get_the_profile_field_options'
+                );
+                ob_start();
+                $field->type_obj->edit_field_options_html($args);
+                $select_options = ob_get_contents();
+                ob_end_clean();
+                $html .= $select_options;
+                $html .= '</select>';
+                break;
+              case 'textbox':
+                $value = (isset($_POST[$id])) ? $_POST[$id] : '';
+                $html .= '<input id="'.$id.'" name="'.$id.'" type ="text" '.$aria_required.' value="'.$value.'" />';
+                break;
+              case 'textarea':
+                $value = (isset($_POST[$id])) ? stripslashes($_POST[$id]) : '';
+                $richtext_enabled = bp_xprofile_is_richtext_enabled_for_field($field->id);
+                if (! $richtext_enabled) {
+                    $r = wp_parse_args($raw_properties, array(
+                      'cols' => 40,
+                      'rows' => 5,
+                  ));
+                    $html .= '<textarea cols="40" rows="5" id="'.$id.'" name="'.$name.'" '.$aria_required.' >'.$value.'</textarea>';
+                } else {
+                    $editor_args = apply_filters('bp_xprofile_field_type_textarea_editor_args', array(
+                        'teeny'         => true,
+                        'media_buttons' => false,
+                        'quicktags'     => true,
+                        'textarea_rows' => 10,
+                    ), 'edit');
+                    ob_start();
+                    wp_editor($value, $name, $editor_args);
+                    $editor = ob_get_contents();
+                    ob_end_clean();
+                    
+                    $html .= $editor;
+                }
+                break;
+              case 'telephone':
+                $value = (isset($_POST[$id])) ? $_POST[$id] : '';
+                $html .= '<input id="'.$id.'" name="'.$name.'" type="tel" '.$aria_required.' value="'.$value.'" />';
+                break;
+              case 'url':
+                $value = (isset($_POST[$id])) ? $_POST[$id] : '';
+                $html .= '<input id="'.$id.'" name="'.$name.'" type="text" '.$aria_required.'  value="'.$value.'" />';
+                break;
+              default:
+                //found no type return blank string
+                return '';
+                break;
+            }
+            $html .= '</fieldset>'
+                    . '</div>';
+            
+            return $html;
         }
         /*
          * Render the xProfile field group Selector page
@@ -113,11 +408,11 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
             //get site option of selected field groups
             $selected = get_site_option("registration_selected_xprofile_groups");
             //set to empty array if nothing is set
-            $selected = ($selected) ? $selected : array();
-      
+            $selected = ($selected)?$selected:array();
+
             //check field groups for required fields and add those field groups to possible ones
             $possible_group_ids = array();
-            $possible_groups = array();
+            $possible_groups    = array();
             foreach ($field_groups as $group) {
                 if ($group->id != 1) {
                     //store group name associated by id
@@ -132,27 +427,27 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
                     }
                 }
             }
-      
+
             //make sure the selected only contains field groups that can possibly be selected
             $selected = array_intersect($selected, $possible_group_ids);
             //updated selected to be accurate
             update_site_option('registration_selected_xprofile_groups', $selected);
             //display selected and unselected groups in html?>
-<div class="wrap">
-<h1>Select xProfile Groups to Include on Registration</h1>
-<small>Only groups with required fields will be listed and only required fields will be displayed</small>
-<div class="group_holder">
-    <?php foreach ($possible_groups as $id => $group) {
+			<div class="wrap">
+																		<h1>Select xProfile Groups to Include on Registration</h1>
+																		<small>Only groups with required fields will be listed and only required fields will be displayed</small>
+																		<div class="group_holder">
+			<?php foreach ($possible_groups as $id => $group) {
                 ?>
-    <p><label><input type="checkbox" name="field_group" value="<?php echo $id; ?>" <?php echo (in_array($id, $selected))? "checked" : ""; ?>  /><?php echo $group; ?></label></p>
-   <?php
+																								    <p><label><input type="checkbox" name="field_group" value="<?php echo $id; ?>" <?php echo (in_array($id, $selected))?"checked":""; ?>  /><?php echo $group; ?></label></p>
+				<?php
             } ?>
-    </div> 
-</div>
-<?php
+			</div>
+																		</div>
+			<?php
         }
     }
-  
+
     $xprofile_group_display = new Registration_Display_xProfile_Groups();
     $xprofile_group_display->set_hooks();
 }
