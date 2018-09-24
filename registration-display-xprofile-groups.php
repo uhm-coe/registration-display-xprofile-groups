@@ -35,8 +35,8 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
             //settings page AJAX action
             add_action('wp_ajax_store_xprofile_field_groups', array($this, 'store_xprofile_field_groups'));
             //add validation for forms
-            if ($_POST) {
-                add_action('bp_actions', array($this,"possible_form_validation"), 0);
+            if (isset($_POST) && !empty($_POST)) {
+                add_action('bp_actions', array($this,"possible_form_validation"), 5);
             }
             //add signup meta from xprofile fields
             add_filter('bp_signup_usermeta', array($this, 'xprofile_add_signup_meta' ), 1, 1);
@@ -79,7 +79,7 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
             $field_groups = bp_profile_get_field_groups();
           
             //iterate through groups
-            foreach ($field_group as  $group) {
+            foreach ($field_groups as  $group) {
                 //if not base and is used in registration check
                 if ($group->id != 1 && $this->use_group_in_registration($group->id)) {
                     //iterate through fields
@@ -90,9 +90,9 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
                             $key = "field_".$field->id;
                             //if not in post set error
                             if (!isset($_POST[$key]) || empty($_POST[$key])) {
-                                $bp->signup->errors = (!is_null($bp->signup->errors))?$bp->signup->errors = array() :$bp->signup->errors;
+                                $bp->signup->errors = (!is_null($bp->signup->errors))? array() :$bp->signup->errors;
                                 //add error
-                                $bp->signup->errors[sanitize_text_field($field->name)] = "You must fill out field '".$field->name."' ";
+                                $bp->signup->errors["field_".$field->id] = "You must fill out field '".$field->name."' ";
                             }
                         }
                     }
@@ -144,6 +144,9 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
          */
         public function add_frontend_styles_and_scripts()
         {
+            if (bp_is_register_page()) {
+                wp_enqueue_script('xprofile-registration-validation', plugin_dir_url().'/registration-display-xprofile-groups/js/registration.js', ['jquery']);
+            }
             wp_enqueue_style("registration_display_xprofile_group_styles", plugin_dir_url().'/registration-display-xprofile-groups/css/style.css');
         }
         public function options_menu()
@@ -187,7 +190,7 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
                 //if group is not 'Base' then render it with it's required fields
                 if ($group->id != 1 && $this->use_group_in_registration($group->id)) {
                     ?>
-                      <div class="register-section extended-profile" id="profile-details-section">
+                      <div class="register-section extended-profile non-base" id="profile-details-section">
 
                          <h2 class="bp-heading"><?php esc_html_e($group->name, 'buddypress'); ?></h2>
                                                           <?php
@@ -224,7 +227,7 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
             }
             //possible error
             ob_start();
-            do_action('bp_'. sanitize_text_field($field->name).'_errors');
+            do_action('bp_'. $id.'_errors');
             $errors = ob_get_contents();
             ob_get_clean();
             $html .= $errors;

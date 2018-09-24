@@ -11,4 +11,9 @@ and open the template in the editor.
     flex-basis: 36%!important;
     flex-grow: 3!important;
 }
+.field-invalid {
+    background-color: #ffa0a0;
+    border-color: #f04040;
+    color: #fff;
+}
 
