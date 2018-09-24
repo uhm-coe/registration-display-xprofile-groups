@@ -14,7 +14,7 @@ jQuery(document).ready(function ($) {
          //iterate through each xprofile group
          $('.non-base').each(function(){
                 //iterate through each required field
-                $('.required-field').each(function(){
+                $(this).find('.required-field').each(function(){
                     //validate field
                     validateField($(this));
                 });     
