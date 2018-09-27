@@ -145,9 +145,9 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
         public function add_frontend_styles_and_scripts()
         {
             if (bp_is_register_page()) {
-                wp_enqueue_script('xprofile-registration-validation', plugin_dir_url().'/registration-display-xprofile-groups/js/registration.js', ['jquery']);
+                wp_enqueue_script('xprofile-registration-validation', plugin_dir_url(__FILE__).'/registration-display-xprofile-groups/js/registration.js', ['jquery']);
             }
-            wp_enqueue_style("registration_display_xprofile_group_styles", plugin_dir_url().'/registration-display-xprofile-groups/css/style.css');
+            wp_enqueue_style("registration_display_xprofile_group_styles", plugin_dir_url(__FILE__).'/registration-display-xprofile-groups/css/style.css');
         }
         public function options_menu()
         {
