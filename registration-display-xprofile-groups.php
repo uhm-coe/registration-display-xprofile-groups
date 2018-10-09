@@ -420,14 +420,7 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
                 if ($group->id != 1) {
                     //store group name associated by id
                     $possible_groups[$group->id] = $group->name;
-                    foreach ($group->fields as $field) {
-                        if ($field->is_required) {
-                            if (!in_array($group->id, $possible_group_ids)) {
-                                $possible_group_ids[] = $group->id;
-                            }
-                            break;
-                        }
-                    }
+                    $possible_group_ids[] = $group->id;
                 }
             }
 
@@ -438,7 +431,6 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
             //display selected and unselected groups in html?>
 			<div class="wrap">
 																		<h1>Select xProfile Groups to Include on Registration</h1>
-																		<small>Only groups with required fields will be listed and only required fields will be displayed</small>
 																		<div class="group_holder">
 			<?php foreach ($possible_groups as $id => $group) {
                 ?>
