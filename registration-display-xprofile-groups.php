@@ -25,6 +25,7 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
         {
             //hook to display all xprofile field groups after buddypress base display runs
             add_action('bp_after_signup_profile_fields', array($this, 'render_xprofile_fields'));
+            add_action('bp_before_account_details_fields', array($this, 'render_intro'));
             //add settings page to allow choosing of field groups to be parsed for registration
             add_action('admin_menu', array($this, 'options_menu'));
             //add admin scripts
@@ -34,6 +35,7 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
             add_action('wp_enqueue_scripts', array($this, 'add_frontend_styles_and_scripts'));
             //settings page AJAX action
             add_action('wp_ajax_store_xprofile_field_groups', array($this, 'store_xprofile_field_groups'));
+            add_action('wp_ajax_store_xprofile_field_groups_intro', array($this, 'store_intro'));
             //add validation for forms
             if (isset($_POST) && !empty($_POST)) {
                 add_action('bp_actions', array($this,"possible_form_validation"), 5);
@@ -62,6 +64,9 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
                         'nonce'    => wp_create_nonce('settings_nonce'),
                     )
                 );
+                
+                wp_register_style('registration-xprofile-settings-style', plugins_url()."/registration-display-xprofile-groups/css/admin.css");
+                wp_enqueue_style('registration-xprofile-settings-style');
             }
         }
         /*
@@ -153,6 +158,32 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
         {
             add_options_page("Registration xProfile Settings", "Registration xProfile Settings", "manage_options", "registration-xprofile-settings", array($this, "registration_xprofile_settings"));
         }
+        public function render_intro()
+        {
+            $content = get_site_option('registration_selected_xprofile_groups_intro');
+          
+            if ($content !== false) {
+                echo "<div class='full_width'>".stripslashes($content)."</div>";
+            }
+        }
+        /*
+         * AJAX call to store intro to be dipslayed before registation page
+         */
+        public function store_intro()
+        {
+            //verify nonce
+            if (!wp_verify_nonce($_REQUEST['nonce'], 'settings_nonce')) {
+                exit('Invalid AJAX call');
+            }
+            
+            $content = $_REQUEST['content'];
+            
+            update_site_option('registration_selected_xprofile_groups_intro', $content);
+            wp_send_json(array('status' => "Success"));
+        }
+        /*
+         * AJAX call to store check xprofile groups to be rendered on registration page
+         */
         public function store_xprofile_field_groups()
         {
             //verify nonce
@@ -438,8 +469,16 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
 				<?php
             } ?>
 			</div>
-																		</div>
+                                                                                                                                                <h3>Text to insert before start of registration (optional)</h3>															</div>
 			<?php
+                        //wording to output before registration
+                        $wording = get_site_option('registration_selected_xprofile_groups_intro');
+            $wording = (empty($wording) || $wording === false) ? '' : stripslashes($wording);
+            wp_editor($wording, 'intro_text');
+            submit_button("Save", "primary", 'intro_wording_save', true, array(
+                'tabindex' => '0',
+                'id' => 'intro_wording_save'
+            ));
         }
     }
 

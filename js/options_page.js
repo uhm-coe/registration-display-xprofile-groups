@@ -24,5 +24,33 @@ jQuery(document).ready(function ($) {
                         // console.log( 'An error occurred.  Data not saved for student.' );
                 },
         });
+   });
+   
+   //listener for save button to save tinymce content
+   $(document).on('click', '#intro_wording_save', function(event){
+       event.preventDefault();
+       //get tinymce text
+       var content = tinymce.editors.intro_text.getContent();
+       
+       //send to server
+       jQuery.ajax({
+                type: 'post',
+                dataType: 'json',
+                url: xprofile_object.ajax_url,
+                data: {
+                        action: 'store_xprofile_field_groups_intro',
+                        content: content,
+                        nonce: xprofile_object.nonce,
+                },
+                success: function(response) {
+                    var msg = '<div id="alert_message_success"><p>Data Saved</p></div>';
+                    jQuery(".wrap").prepend(msg).fadeIn(2000);
+                    setTimeout(function(){ jQuery('#alert_message_success').fadeOut(3000)}, 1000); //remove message
+                },
+                error: function() {
+                        // console.log( 'An error occurred.  Data not saved for student.' );
+                },
+        });
+       
    })
 });
