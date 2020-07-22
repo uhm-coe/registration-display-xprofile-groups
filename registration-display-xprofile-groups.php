@@ -286,7 +286,6 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
 							. '</label>';
 					$count++;
 				}
-				$option_values = maybe_unserialize(BP_XProfile_ProfileData::get_value_byid($this->field_obj->id, $args['user_id']));
 				$html .= '</div>';
 				break;
 			case 'radio':
@@ -299,7 +298,6 @@ if (!class_exists('Registration_Display_xProfile_Groups')) {
 							. '<input type="radio" name="'.$id.'" id="'.$opt_id.'" value="'.$opt->name.'" '.$checked.'>'.$opt->name
 							. '</label>';
 				}
-				$option_values = maybe_unserialize(BP_XProfile_ProfileData::get_value_byid($this->field_obj->id, $args['user_id']));
 				$html .= '</div>';
 				break;
 			case 'multiselectbox':
